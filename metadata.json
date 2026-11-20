@@ -1,0 +1,6 @@
+{
+  "name": "Gradian Digital Twin — P2 Operations",
+  "description": "Operational 3D warehouse and production digital twin with conflict-aware routing, vehicle runtime, WMS traceability, and MES/GMP orchestration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
