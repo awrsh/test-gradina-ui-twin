@@ -114,14 +114,31 @@ function resolveStaticDir() {
   return distDir;
 }
 
-function attachProductionStatic(app: express.Express) {
-  // On Vercel, `public/**` is served by the CDN; express.static is ignored there.
-  if (process.env.VERCEL) return;
-
+/**
+ * Serve the Vite SPA with explicit sendFile.
+ * On Vercel, `express.static()` is ignored, so we resolve files ourselves.
+ * `public/**` is bundled into the function via vercel.json includeFiles.
+ */
+function attachSpaAssets(app: express.Express) {
   const staticDir = resolveStaticDir();
-  app.use(express.static(staticDir));
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(staticDir, 'index.html'));
+  const indexHtml = path.join(staticDir, 'index.html');
+  if (!fs.existsSync(indexHtml)) {
+    console.warn(`[twin] SPA index missing at ${indexHtml}`);
+    return;
+  }
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path === '/ws') return next();
+
+    const relativePath = req.path === '/' ? 'index.html' : req.path.replace(/^\/+/, '');
+    const candidate = path.resolve(staticDir, relativePath);
+    if (!candidate.startsWith(staticDir)) return next();
+
+    if (relativePath !== 'index.html' && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return res.sendFile(candidate);
+    }
+
+    return res.sendFile(indexHtml);
   });
 }
 
@@ -130,6 +147,13 @@ function createTwinHttpRuntime(): TwinHttpRuntime {
   autopilot.seedInitialLiveOperations();
   const server = http.createServer(app);
   attachRealtimeLayer(server, orchestrator, autopilot);
+
+  // Vercel imports this module without calling startServer(), so SPA routes
+  // must be attached here. Local `npm run start` also benefits.
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    attachSpaAssets(app);
+  }
+
   return { app, server, orchestrator, autopilot };
 }
 
@@ -151,9 +175,8 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    attachProductionStatic(app);
   }
+  // Production / Vercel SPA routes are attached in createTwinHttpRuntime().
 
   const PORT = Number(process.env.PORT || 3000);
   server.listen(PORT, '0.0.0.0', () => {

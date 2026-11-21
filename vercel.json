@@ -3,10 +3,12 @@
   "framework": "express",
   "buildCommand": "npm run build",
   "installCommand": "npm install",
+  "outputDirectory": "public",
   "functions": {
     "server.ts": {
       "maxDuration": 300,
-      "memory": 1024
+      "memory": 1024,
+      "includeFiles": "public/**"
     }
   }
 }
