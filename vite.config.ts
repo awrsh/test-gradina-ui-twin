@@ -6,10 +6,16 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // Vercel Express serves SPA assets from /public via CDN.
+    publicDir: false,
+    build: {
+      outDir: 'public',
+      emptyOutDir: true,
+    },
     plugins: [
       react(),
       tailwindcss(),
-      // Copies src/assets into dist/ so root-relative URLs like
+      // Copies src/assets into the build output so root-relative URLs like
       // "/src/assets/images/..." (e.g. generate_image output) still resolve
       // in production builds. Do not remove.
       {
@@ -19,11 +25,11 @@ export default defineConfig(() => {
           if (error) {
             return;
           }
-          const distDir = path.resolve(import.meta.dirname, 'dist');
+          const outDir = path.resolve(import.meta.dirname, 'public');
           const srcAssets = path.resolve(import.meta.dirname, 'src/assets');
-          const distAssets = path.resolve(distDir, 'src/assets');
-          if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
-            fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
+          const outAssets = path.resolve(outDir, 'src/assets');
+          if (fs.existsSync(outDir) && fs.existsSync(srcAssets)) {
+            fs.cpSync(srcAssets, outAssets, {recursive: true, force: true});
           }
         },
       },

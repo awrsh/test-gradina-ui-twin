@@ -56,9 +56,28 @@ export function useTwinClient() {
             ...(options?.headers || {}),
           },
         });
-        const body = await res.json();
+        const raw = await res.text();
+        let body: unknown = null;
+        if (raw) {
+          try {
+            body = JSON.parse(raw);
+          } catch {
+            const err: TwinErrorBody = {
+              code: 'VALIDATION_ERROR',
+              message:
+                res.status === 404
+                  ? 'API endpoint not found (backend not deployed)'
+                  : `Non-JSON response (${res.status})`,
+              httpStatus: res.status,
+            };
+            setLastError(err);
+            setLastNotice(null);
+            return { ok: false, error: err };
+          }
+        }
         if (!res.ok) {
-          const err: TwinErrorBody = body.error || {
+          const payload = body as { error?: TwinErrorBody } | null;
+          const err: TwinErrorBody = payload?.error || {
             code: 'VALIDATION_ERROR',
             message: 'Request failed',
             httpStatus: res.status,
@@ -147,6 +166,15 @@ export function useTwinClient() {
       ws?.close();
     };
   }, []);
+
+  // HTTP polling fallback while WebSocket is down (cold start / platform limits).
+  useEffect(() => {
+    if (wsConnected) return;
+    const pollTimer = window.setInterval(() => {
+      void refreshAll();
+    }, 2000);
+    return () => window.clearInterval(pollTimer);
+  }, [wsConnected, refreshAll]);
 
   const submitMove = useCallback(
     async (payload: {

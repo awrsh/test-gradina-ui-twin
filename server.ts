@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -6,6 +7,19 @@ import { createApiRouter } from './src/server/api-router.ts';
 import { AutonomousFactoryDirector } from './src/server/autonomous-factory.ts';
 import { TwinSiteOrchestrator } from './src/server/mission-orchestrator.ts';
 import { DEFAULT_SITE_ID, DEFAULT_TENANT_ID } from './src/server/seed-data.ts';
+
+type TwinHttpRuntime = {
+  app: express.Express;
+  server: http.Server;
+  orchestrator: TwinSiteOrchestrator;
+  autopilot: AutonomousFactoryDirector;
+};
+
+declare global {
+  // Persist across warm Fluid Compute invocations / HMR.
+  // eslint-disable-next-line no-var
+  var __gradianTwinHttpRuntime: TwinHttpRuntime | undefined;
+}
 
 export function createTwinServerApp() {
   const app = express();
@@ -19,12 +33,11 @@ export function createTwinServerApp() {
   return { app, orchestrator, autopilot };
 }
 
-async function startServer() {
-  const { app, orchestrator, autopilot } = createTwinServerApp();
-  autopilot.seedInitialLiveOperations();
-  const server = http.createServer(app);
-
-  // Scoped WebSocket server sharing port 3000 with Express
+function attachRealtimeLayer(
+  server: http.Server,
+  orchestrator: TwinSiteOrchestrator,
+  autopilot: AutonomousFactoryDirector
+) {
   const wss = new WebSocketServer({ server, path: '/ws' });
   const clients = new Set<{ ws: WebSocket; tenantId: string; siteId: string }>();
 
@@ -44,7 +57,6 @@ async function startServer() {
     const client = { ws, tenantId, siteId };
     clients.add(client);
 
-    // Send initial authoritative snapshot
     ws.send(
       JSON.stringify({
         type: 'snapshot',
@@ -57,7 +69,6 @@ async function startServer() {
     });
   });
 
-  // Subscribe to event backbone and push scoped delta events to connected clients
   orchestrator.eventBus.subscribe(
     orchestrator.world.tenantId,
     orchestrator.world.siteId,
@@ -75,14 +86,12 @@ async function startServer() {
     }
   );
 
-  // Authoritative simulation / telemetry tick (250ms = 4 Hz server authoritative updates)
-  // Frontend Three.js loop smoothly interpolates between authoritative updates at 60fps
+  // Authoritative simulation tick (250ms). Frontend interpolates between updates.
   let tickCounter = 0;
   setInterval(() => {
     autopilot.step(0.25);
     tickCounter += 1;
 
-    // Broadcast full projection sync every 1s or whenever any vehicle is moving
     const hasBusy = orchestrator.getVehicles().some((v) => v.activeMissionId !== null);
     if (hasBusy || tickCounter % 4 === 0) {
       const snap = JSON.stringify({
@@ -96,6 +105,44 @@ async function startServer() {
       }
     }
   }, 250);
+}
+
+function resolveStaticDir() {
+  const publicDir = path.resolve(process.cwd(), 'public');
+  const distDir = path.resolve(process.cwd(), 'dist');
+  if (fs.existsSync(path.join(publicDir, 'index.html'))) return publicDir;
+  return distDir;
+}
+
+function attachProductionStatic(app: express.Express) {
+  // On Vercel, `public/**` is served by the CDN; express.static is ignored there.
+  if (process.env.VERCEL) return;
+
+  const staticDir = resolveStaticDir();
+  app.use(express.static(staticDir));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(staticDir, 'index.html'));
+  });
+}
+
+function createTwinHttpRuntime(): TwinHttpRuntime {
+  const { app, orchestrator, autopilot } = createTwinServerApp();
+  autopilot.seedInitialLiveOperations();
+  const server = http.createServer(app);
+  attachRealtimeLayer(server, orchestrator, autopilot);
+  return { app, server, orchestrator, autopilot };
+}
+
+function getTwinHttpRuntime(): TwinHttpRuntime {
+  if (!globalThis.__gradianTwinHttpRuntime) {
+    globalThis.__gradianTwinHttpRuntime = createTwinHttpRuntime();
+  }
+  return globalThis.__gradianTwinHttpRuntime;
+}
+
+async function startServer() {
+  const runtime = getTwinHttpRuntime();
+  const { app, server } = runtime;
 
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
@@ -105,11 +152,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distDir = path.resolve(process.cwd(), 'dist');
-    app.use(express.static(distDir));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distDir, 'index.html'));
-    });
+    attachProductionStatic(app);
   }
 
   const PORT = Number(process.env.PORT || 3000);
@@ -118,12 +161,16 @@ async function startServer() {
   });
 }
 
-// Start server only when executed directly (not imported by Vitest)
+// Vercel Fluid Compute / Express entry: export HTTP server (required for WebSocket upgrades).
+const runtime = getTwinHttpRuntime();
+export default runtime.server;
+
+// Start only when executed directly (not imported by Vitest / Vercel).
 const isDirectRun =
   process.argv[1] &&
   (process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js'));
 
-if (isDirectRun) {
+if (isDirectRun && !process.env.VERCEL) {
   startServer().catch((err) => {
     console.error('Failed to start Gradian Digital Twin server:', err);
     process.exit(1);
