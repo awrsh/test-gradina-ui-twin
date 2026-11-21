@@ -8,7 +8,7 @@
     "start": "node server.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "clean": "rm -rf dist public server.js",
+    "clean": "rm -rf dist public server.js .vercel",
     "lint": "tsc --noEmit",
     "test": "vitest run"
   },

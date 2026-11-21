@@ -23,6 +23,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["server.ts", "src", "tests"],
+  "include": ["server.ts", "twin-server.ts", "api", "src", "tests"],
   "exclude": ["dist", "public", "node_modules"]
 }

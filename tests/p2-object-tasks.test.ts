@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createTwinServerApp } from '../server';
+import { createTwinServerApp } from '../twin-server';
 import { DEFAULT_SITE_ID, DEFAULT_TENANT_ID } from '../src/server/seed-data';
 
 describe('Gradian Digital Twin — Object-Bound Tasks & MES Window API', () => {

@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createTwinServerApp } from '../server';
+import { createTwinServerApp } from '../twin-server';
 import { resolvePrincipal } from '../src/server/auth-rbac';
 import { AutonomousFactoryDirector } from '../src/server/autonomous-factory';
 import { TwinSiteOrchestrator } from '../src/server/mission-orchestrator';
