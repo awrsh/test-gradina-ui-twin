@@ -221,8 +221,10 @@ export const OperationsDock: React.FC<Props> = ({
 
   return (
     <div
-      className="pointer-events-none fixed bottom-4 left-1/2 -translate-x-1/2 z-20 w-[min(1160px,96vw)] flex flex-col items-center transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+      className="pointer-events-none fixed bottom-4 left-1/2 z-20 w-[min(1160px,calc(100vw-2rem))] max-w-full flex flex-col items-center transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
       style={{
+        // Avoid Tailwind `-translate-x-*` here: in v4 it sets CSS `translate`
+        // and would stack with this `transform`, shifting the dock off-screen.
         transform: collapsed ? 'translate(-50%, calc(100% - 38px))' : 'translate(-50%, 0)',
       }}
     >
